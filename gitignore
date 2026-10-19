@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------- Procedure Studio
+# Local configuration: may hold endpoints, profiles or keys. Commit studio.example.yaml instead.
+studio.yaml
+backend/studio.yaml
+.env
+.env.*
+!.env.example
+
+# Studio data (projects, runs, 3D, parts lists, documents, settings.json with the LLM key).
+# The default is ~/.techpub-studio, outside the repo; these cover a data folder set inside it.
+.techpub-studio/
+data/
+studio-data/
+settings.json
+
+# Published output (folder connector)
+published/
+backend/published/
+
+# Customer and program files: never in the repo (CAD, parts lists, drawings, SBs)
+*.stp
+*.step
+*.STP
+*.STEP
+*.stpz
+*.igs
+*.iges
+*.CATPart
+*.CATProduct
+*.glb
+*.gltf
+*.npz
+samples/
+inputs/
+# PDFs and spreadsheets anywhere except the shipped examples and schema packages
+*.pdf
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+!examples/**
+!packages/**
+
+# Legacy Windows converter (cad-step-to-glb.exe) and other binaries
+engine/
+*.exe
+*.dll
+
+# ---------------------------------------------------------------- Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------------------------------------------------------------- Frontend
+frontend/node_modules/
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+.vite/
+npm-debug.log*
+yarn-error.log*
+# The built UI in backend/studio/web IS committed: the backend serves it, so no Node is needed to run Studio.
+# Rebuild it with `cd frontend && npm run build` before committing UI changes.
+
+# ---------------------------------------------------------------- Editors and OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------- Logs
+*.log
+logs/
