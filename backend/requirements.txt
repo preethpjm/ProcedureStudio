@@ -1,0 +1,30 @@
+# Procedure Studio backend (Python 3.11 or 3.12)
+# CAD: Open CASCADE bindings. Pin 7.8.x: OCP 8 dropped TDF_LabelSequence, which the XCAF reader needs.
+cadquery-ocp==7.8.1.1.post1
+python-fcl>=0.7,<0.8          # contact and clearance queries
+trimesh>=4.4,<6               # meshes and ray casting for blocking directions
+rtree>=1.2                    # trimesh spatial index
+scipy>=1.11
+numpy>=1.26
+
+# Engineering documents
+pdfplumber>=0.11              # drawing torques and notes, APL / MBOM PDFs
+pandas>=2.1
+openpyxl>=3.1                 # MBOM Excel in, TechPub IPL Excel out
+lxml>=5                       # XML, XSD 1.0, DTD, Schematron, XSLT
+xmlschema>=3.3                # XSD 1.1 and ID/IDREF checks
+
+# Service
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+pydantic>=2.5
+httpx>=0.27                   # LLM providers
+PyYAML>=6
+
+# Optional
+# boto3>=1.34                 # llm.provider: bedrock
+# argostranslate==1.9.6       # offline FR->EN nomenclature translation in the reconciler
+
+# Tests
+pytest>=8

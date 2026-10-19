@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC S1000D 4.2 IPD schema subset (see common.xsd). -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:include schemaLocation="common.xsd"/>
+  <xs:element name="dmodule"><xs:complexType><xs:sequence>
+    <xs:element ref="identAndStatusSection"/>
+    <xs:element name="content"><xs:complexType><xs:sequence>
+      <xs:element name="illustratedPartsCatalog"><xs:complexType><xs:sequence>
+        <xs:element name="figure" maxOccurs="unbounded"><xs:complexType><xs:sequence><xs:element name="title" type="xs:string"/><xs:element name="graphic" maxOccurs="unbounded"><xs:complexType><xs:attribute name="infoEntityIdent" use="required"/></xs:complexType></xs:element></xs:sequence><xs:attribute name="id" type="xs:ID"/></xs:complexType></xs:element>
+        <xs:element name="catalogSeqNumber" maxOccurs="unbounded"><xs:complexType><xs:sequence>
+          <xs:element name="itemSeqNumber" maxOccurs="unbounded"><xs:complexType><xs:sequence>
+            <xs:element name="quantityPerNextHigherAssy" type="xs:string"/>
+            <xs:element name="partRef"><xs:complexType><xs:attribute name="manufacturerCodeValue" use="required"/><xs:attribute name="partNumberValue" use="required"/></xs:complexType></xs:element>
+            <xs:element name="partSegment" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="itemIdentData"><xs:complexType><xs:sequence><xs:element name="descrForPart" type="xs:string"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
+            <xs:element name="partLocationSegment" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="notIllustrated" minOccurs="0"><xs:complexType/></xs:element><xs:element name="attachStoreShipPart" minOccurs="0"><xs:complexType><xs:attribute name="attachStoreShipPartCode" use="required"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
+            <xs:element name="applicabilitySegment" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="usableOnCodeAssy" type="xs:string" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+          </xs:sequence><xs:attribute name="itemSeqNumberValue" use="required"/></xs:complexType></xs:element>
+        </xs:sequence>
+          <xs:attribute name="systemCode"/><xs:attribute name="subSystemCode"/><xs:attribute name="subSubSystemCode"/><xs:attribute name="assyCode"/>
+          <xs:attribute name="figureNumber" use="required"/><xs:attribute name="item" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="\d{3,4}"/></xs:restriction></xs:simpleType></xs:attribute>
+          <xs:attribute name="itemVariant"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="[A-Z]"/></xs:restriction></xs:simpleType></xs:attribute>
+          <xs:attribute name="indenture" use="required"/><xs:attribute name="id" type="xs:ID"/></xs:complexType></xs:element>
+      </xs:sequence></xs:complexType></xs:element>
+    </xs:sequence></xs:complexType></xs:element>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Example project BREX (information code 022). It builds on the S1000D default BREX named in its own
+     brexDmRef; when that one is not installed, the check says so and runs these rules only.
+     Point the project's data modules at it with the publication setting "BREX data module code":
+     SLSBSELV-A-00-00-00-00A-022A-D -->
+<dmodule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="http://www.s1000d.org/S1000D_4-2/xml_schema_flat/brex.xsd">
+  <identAndStatusSection>
+    <dmAddress>
+      <dmIdent>
+        <dmCode modelIdentCode="SLSBSELV" systemDiffCode="A" systemCode="00" subSystemCode="0" subSubSystemCode="0"
+                assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="022" infoCodeVariant="A" itemLocationCode="D"/>
+        <language languageIsoCode="en" countryIsoCode="US"/>
+        <issueInfo issueNumber="001" inWork="00"/>
+      </dmIdent>
+      <dmAddressItems>
+        <issueDate year="2026" month="10" day="16"/>
+        <dmTitle><techName>Brake selector valve project</techName><infoName>Business rules exchange</infoName></dmTitle>
+      </dmAddressItems>
+    </dmAddress>
+    <dmStatus issueType="new">
+      <security securityClassification="01"/>
+      <brexDmRef><dmRef><dmRefIdent>
+        <dmCode modelIdentCode="S1000D" systemDiffCode="G" systemCode="04" subSystemCode="1" subSubSystemCode="0"
+                assyCode="0301" disassyCode="00" disassyCodeVariant="A" infoCode="022" infoCodeVariant="A" itemLocationCode="D"/>
+      </dmRefIdent></dmRef></brexDmRef>
+    </dmStatus>
+  </identAndStatusSection>
+  <content>
+    <brex>
+      <contextRules>
+        <structureObjectRuleGroup>
+          <structureObjectRule>
+            <objectPath allowedObjectFlag="2">//dmIdent/dmCode/@modelIdentCode</objectPath>
+            <objectUse>SLS-001: The model identification code of the project's data modules is SLSBSELV.</objectUse>
+            <objectValue valueForm="single" valueAllowed="SLSBSELV">Brake selector valve</objectValue>
+          </structureObjectRule>
+          <structureObjectRule>
+            <objectPath allowedObjectFlag="2">//security/@securityClassification</objectPath>
+            <objectUse>SLS-002: Data modules are unclassified (01).</objectUse>
+            <objectValue valueForm="single" valueAllowed="01">Unclassified</objectValue>
+          </structureObjectRule>
+          <structureObjectRule>
+            <objectPath allowedObjectFlag="1">//dmStatus/applic</objectPath>
+            <objectUse>SLS-003: Every data module states its applicability.</objectUse>
+          </structureObjectRule>
+          <structureObjectRule>
+            <objectPath allowedObjectFlag="0">//acronym</objectPath>
+            <objectUse>SLS-004: Acronym markup is not used in this project.</objectUse>
+          </structureObjectRule>
+          <structureObjectRule>
+            <objectPath allowedObjectFlag="2">//issueInfo/@inWork</objectPath>
+            <objectUse>SLS-005: Released data modules have inWork 00.</objectUse>
+            <objectValue valueForm="single" valueAllowed="00">Released</objectValue>
+          </structureObjectRule>
+        </structureObjectRuleGroup>
+      </contextRules>
+    </brex>
+  </content>
+</dmodule>

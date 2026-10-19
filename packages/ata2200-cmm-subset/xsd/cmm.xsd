@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC subset of the ATA iSpec 2200 CMM structure in XML form, covering what Procedure Studio
+     generates (DISASSEMBLY, ASSEMBLY, IPL). Not the official ATA DTD: install the official iSpec 2200 set for real work. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:attributeGroup name="ata"><xs:attribute name="chapnbr"/><xs:attribute name="sectnbr"/><xs:attribute name="subjnbr"/><xs:attribute name="func"/><xs:attribute name="seq"/><xs:attribute name="confltr"/><xs:attribute name="varnbr"/><xs:attribute name="pgblknbr"/><xs:attribute name="chg"/><xs:attribute name="key" type="xs:ID"/><xs:attribute name="revdate"/></xs:attributeGroup>
+  <xs:element name="para"><xs:complexType mixed="true"><xs:choice minOccurs="0" maxOccurs="unbounded">
+    <xs:element name="ted"><xs:complexType><xs:sequence><xs:element name="toolnbr" type="xs:string"/><xs:element name="toolname" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
+    <xs:element name="con"><xs:complexType><xs:sequence><xs:element name="connbr" type="xs:string"/><xs:element name="conname" type="xs:string"/></xs:sequence></xs:complexType></xs:element>
+  </xs:choice></xs:complexType></xs:element>
+  <xs:element name="warning"><xs:complexType><xs:sequence><xs:element ref="para" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="caution"><xs:complexType><xs:sequence><xs:element ref="para" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="prclist1"><xs:complexType><xs:sequence><xs:element name="prcitem1" maxOccurs="unbounded"><xs:complexType><xs:sequence><xs:element name="prcitem"><xs:complexType><xs:sequence><xs:choice maxOccurs="unbounded"><xs:element ref="warning"/><xs:element ref="caution"/><xs:element ref="para"/></xs:choice></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="cmm"><xs:complexType><xs:sequence>
+    <xs:element name="title" type="xs:string"/>
+    <xs:element name="partinfo" minOccurs="0"><xs:complexType><xs:sequence maxOccurs="unbounded"><xs:element name="cmpnom" type="xs:string"/><xs:element name="mfrpnr"><xs:complexType><xs:sequence><xs:element name="pnr" type="xs:string"/><xs:element name="mfr" type="xs:string"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
+    <xs:element name="pgblk" maxOccurs="unbounded"><xs:complexType><xs:sequence>
+      <xs:element name="title" type="xs:string"/>
+      <xs:element name="task" maxOccurs="unbounded"><xs:complexType><xs:sequence>
+        <xs:element name="title" type="xs:string"/>
+        <xs:element name="topic"><xs:complexType><xs:sequence><xs:element name="subtask" maxOccurs="unbounded"><xs:complexType><xs:sequence>
+          <xs:element name="title" type="xs:string"/>
+          <xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element ref="warning"/><xs:element ref="caution"/></xs:choice>
+          <xs:element ref="prclist1"/>
+        </xs:sequence><xs:attributeGroup ref="ata"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
+      </xs:sequence><xs:attributeGroup ref="ata"/></xs:complexType></xs:element>
+    </xs:sequence><xs:attributeGroup ref="ata"/></xs:complexType></xs:element>
+    <xs:element name="ipl" minOccurs="0"><xs:complexType><xs:sequence>
+      <xs:element name="title" type="xs:string"/>
+      <xs:element name="dplist"><xs:complexType><xs:sequence><xs:element name="title" type="xs:string"/>
+        <xs:element name="figure" maxOccurs="unbounded"><xs:complexType><xs:sequence><xs:element name="title" type="xs:string"/>
+          <xs:element name="prtlist"><xs:complexType><xs:sequence><xs:element name="itemdata" maxOccurs="unbounded"><xs:complexType><xs:sequence>
+            <xs:element name="pnr" type="xs:string"/>
+            <xs:element name="iplnom"><xs:complexType><xs:sequence><xs:element name="nom"><xs:complexType><xs:sequence><xs:element name="kwd" type="xs:string"/><xs:element name="adt" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element><xs:element name="msc" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
+            <xs:element name="effcode" type="xs:string" minOccurs="0"/>
+            <xs:element name="mfr" type="xs:string" minOccurs="0"/>
+            <xs:element name="upa"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="\d+|RF|AR"/></xs:restriction></xs:simpleType></xs:element>
+          </xs:sequence><xs:attribute name="itemnbr" use="required"/><xs:attribute name="attach"/><xs:attribute name="illusind"/><xs:attribute name="indent"/><xs:attribute name="delitem"/></xs:complexType></xs:element></xs:sequence><xs:attribute name="chg"/><xs:attribute name="key"/><xs:attribute name="revdate"/></xs:complexType></xs:element>
+        </xs:sequence><xs:attributeGroup ref="ata"/><xs:attribute name="fignbr"/></xs:complexType></xs:element>
+      </xs:sequence></xs:complexType></xs:element>
+    </xs:sequence><xs:attributeGroup ref="ata"/></xs:complexType></xs:element>
+  </xs:sequence>
+  <xs:attribute name="spl"/><xs:attribute name="oidate"/><xs:attribute name="tsn"/><xs:attribute name="docnbr"/><xs:attribute name="lang"/><xs:attribute name="chapnbr"/><xs:attribute name="sectnbr"/><xs:attribute name="subjnbr"/><xs:attribute name="type"/><xs:attribute name="prelim"/><xs:attribute name="chg"/><xs:attribute name="revdate"/><xs:attribute name="levmaint"/>
+  </xs:complexType></xs:element>
+</xs:schema>

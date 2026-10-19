@@ -1,0 +1,15 @@
+{
+  "package_id": "studio-ata2200-cmm-subset",
+  "name": "SYNTHETIC ATA iSpec 2200 CMM subset (XML) for Procedure Studio tests",
+  "standard": "ATA2200",
+  "issue": "cmm-xml-subset",
+  "provenance": "synthetic",
+  "licence_note": "Synthetic subset written to test Procedure Studio. Install the official iSpec 2200 set for real work.",
+  "doc_types": [
+    {"id": "cmm", "label": "Component maintenance manual", "content_family": "procedure",
+     "match": {"local_name": "cmm", "namespace": null, "schema_location_pattern": null},
+     "identity_xpaths": {"docnbr": "/cmm/@docnbr", "chapnbr": "/cmm/@chapnbr", "sectnbr": "/cmm/@sectnbr", "subjnbr": "/cmm/@subjnbr"},
+     "schema_file": "xsd/cmm.xsd"}
+  ],
+  "files": ["xsd/cmm.xsd"]
+}

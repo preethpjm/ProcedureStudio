@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC S1000D 4.2 procedural schema subset (see common.xsd). -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:include schemaLocation="common.xsd"/>
+  <xs:element name="dmodule"><xs:complexType><xs:sequence>
+    <xs:element ref="identAndStatusSection"/>
+    <xs:element name="content"><xs:complexType><xs:sequence>
+      <xs:element name="warningsAndCautions" minOccurs="0"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element ref="warning"/><xs:element ref="caution"/></xs:choice></xs:complexType></xs:element>
+      <xs:element name="procedure"><xs:complexType><xs:sequence>
+        <xs:element name="commonInfo" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="title" type="xs:string" minOccurs="0"/><xs:element ref="para" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+        <xs:element name="preliminaryRqmts"><xs:complexType><xs:sequence>
+          <xs:element ref="reqCondGroup"/>
+          <xs:element name="reqPersons" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="personnel" maxOccurs="unbounded"><xs:complexType><xs:sequence><xs:element name="personCategory"><xs:complexType><xs:attribute name="personCategoryCode" use="required"/></xs:complexType></xs:element><xs:element name="personSkill" minOccurs="0"><xs:complexType><xs:attribute name="skillLevelCode"/></xs:complexType></xs:element><xs:element name="estimatedTime" minOccurs="0"><xs:complexType><xs:simpleContent><xs:extension base="xs:decimal"><xs:attribute name="unitOfMeasure"/></xs:extension></xs:simpleContent></xs:complexType></xs:element></xs:sequence><xs:attribute name="numRequired"/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
+          <xs:element name="reqSupportEquips"><xs:complexType><xs:choice><xs:element name="noSupportEquips"><xs:complexType/></xs:element><xs:element name="supportEquipDescrGroup"><xs:complexType><xs:sequence><xs:element name="supportEquipDescr" type="reqItem" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>
+          <xs:element name="reqSupplies"><xs:complexType><xs:choice><xs:element name="noSupplies"><xs:complexType/></xs:element><xs:element name="supplyDescrGroup"><xs:complexType><xs:sequence><xs:element name="supplyDescr" type="reqItem" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>
+          <xs:element name="reqSpares"><xs:complexType><xs:choice><xs:element name="noSpares"><xs:complexType/></xs:element><xs:element name="spareDescrGroup"><xs:complexType><xs:sequence><xs:element name="spareDescr" type="reqItem" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>
+          <xs:element name="reqSafety"><xs:complexType><xs:choice><xs:element name="noSafety"><xs:complexType/></xs:element><xs:element name="safetyRqmts"><xs:complexType><xs:choice maxOccurs="unbounded"><xs:element ref="warning"/><xs:element ref="caution"/></xs:choice><xs:attribute name="warningRefs" type="xs:IDREFS"/><xs:attribute name="cautionRefs" type="xs:IDREFS"/></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>
+        </xs:sequence></xs:complexType></xs:element>
+        <xs:element name="mainProcedure"><xs:complexType><xs:sequence><xs:element ref="proceduralStep" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+        <xs:element name="closeRqmts"><xs:complexType><xs:sequence><xs:element ref="reqCondGroup"/></xs:sequence></xs:complexType></xs:element>
+      </xs:sequence></xs:complexType></xs:element>
+    </xs:sequence></xs:complexType></xs:element>
+  </xs:sequence></xs:complexType></xs:element>
+  <xs:element name="reqCondGroup"><xs:complexType><xs:choice><xs:element name="noConds"><xs:complexType/></xs:element><xs:element name="reqCondNoRef" maxOccurs="unbounded"><xs:complexType><xs:sequence><xs:element name="reqCond" type="xs:string"/></xs:sequence></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>
+  <xs:complexType name="reqItem"><xs:sequence>
+    <xs:element name="name" type="xs:string"/>
+    <xs:element name="identNumber" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="manufacturerCode" type="xs:string"/><xs:element name="partAndSerialNumber"><xs:complexType><xs:sequence><xs:element name="partNumber" type="xs:string"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
+    <xs:element name="toolRef" minOccurs="0"><xs:complexType><xs:attribute name="toolNumber"/></xs:complexType></xs:element>
+    <xs:element name="reqQuantity" minOccurs="0"><xs:complexType><xs:simpleContent><xs:extension base="xs:decimal"><xs:attribute name="unitOfMeasure"/></xs:extension></xs:simpleContent></xs:complexType></xs:element>
+  </xs:sequence><xs:attribute name="id" type="xs:ID"/></xs:complexType>
+  <xs:element name="proceduralStep"><xs:complexType><xs:sequence>
+    <xs:element name="title" type="xs:string" minOccurs="0"/>
+    <xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element ref="warning"/><xs:element ref="caution"/><xs:element name="note"><xs:complexType><xs:sequence><xs:element name="notePara" maxOccurs="unbounded"><xs:complexType mixed="true"><xs:sequence><xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element><xs:element ref="para"/></xs:choice>
+    <xs:element ref="proceduralStep" minOccurs="0" maxOccurs="unbounded"/>
+  </xs:sequence><xs:attribute name="id" type="xs:ID"/><xs:attribute name="warningRefs" type="xs:IDREFS"/><xs:attribute name="cautionRefs" type="xs:IDREFS"/></xs:complexType></xs:element>
+</xs:schema>

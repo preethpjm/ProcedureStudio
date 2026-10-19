@@ -1,0 +1,71 @@
+{
+  "package_id": "studio-s1000d-4.2-subset",
+  "name": "SYNTHETIC S1000D 4.2 subset (Procedure, IPD) for Procedure Studio tests",
+  "standard": "S1000D",
+  "issue": "4.2-subset",
+  "provenance": "synthetic",
+  "licence_note": "Synthetic subset written to test Procedure Studio. Install the official S1000D 4.2 package for real work.",
+  "doc_types": [
+    {
+      "id": "proced",
+      "label": "Procedure",
+      "content_family": "procedure",
+      "match": {
+        "local_name": "dmodule",
+        "namespace": null,
+        "schema_location_pattern": "(^|/)proced\\.xsd$"
+      },
+      "identity_xpaths": {
+        "modelIdentCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@modelIdentCode",
+        "systemDiffCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@systemDiffCode",
+        "systemCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@systemCode",
+        "subSystemCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@subSystemCode",
+        "subSubSystemCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@subSubSystemCode",
+        "assyCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@assyCode",
+        "disassyCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@disassyCode",
+        "disassyCodeVariant": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@disassyCodeVariant",
+        "infoCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@infoCode",
+        "infoCodeVariant": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@infoCodeVariant",
+        "itemLocationCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@itemLocationCode",
+        "issueNumber": "/dmodule/identAndStatusSection/dmAddress/dmIdent/issueInfo/@issueNumber",
+        "inWork": "/dmodule/identAndStatusSection/dmAddress/dmIdent/issueInfo/@inWork",
+        "techName": "/dmodule/identAndStatusSection/dmAddress/dmTitle/techName"
+      },
+      "schema_file": "xsd/proced.xsd",
+      "discriminator": "/dmodule/content/procedure"
+    },
+    {
+      "id": "ipd",
+      "label": "Illustrated parts data",
+      "content_family": "ipd",
+      "match": {
+        "local_name": "dmodule",
+        "namespace": null,
+        "schema_location_pattern": "(^|/)ipd\\.xsd$"
+      },
+      "identity_xpaths": {
+        "modelIdentCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@modelIdentCode",
+        "systemDiffCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@systemDiffCode",
+        "systemCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@systemCode",
+        "subSystemCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@subSystemCode",
+        "subSubSystemCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@subSubSystemCode",
+        "assyCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@assyCode",
+        "disassyCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@disassyCode",
+        "disassyCodeVariant": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@disassyCodeVariant",
+        "infoCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@infoCode",
+        "infoCodeVariant": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@infoCodeVariant",
+        "itemLocationCode": "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode/@itemLocationCode",
+        "issueNumber": "/dmodule/identAndStatusSection/dmAddress/dmIdent/issueInfo/@issueNumber",
+        "inWork": "/dmodule/identAndStatusSection/dmAddress/dmIdent/issueInfo/@inWork",
+        "techName": "/dmodule/identAndStatusSection/dmAddress/dmTitle/techName"
+      },
+      "schema_file": "xsd/ipd.xsd",
+      "discriminator": "/dmodule/content/illustratedPartsCatalog"
+    }
+  ],
+  "files": [
+    "xsd/common.xsd",
+    "xsd/proced.xsd",
+    "xsd/ipd.xsd"
+  ]
+}

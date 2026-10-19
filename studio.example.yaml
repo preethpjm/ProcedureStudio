@@ -1,0 +1,47 @@
+# Procedure Studio configuration. Copy to studio.yaml (or point STUDIO_CONFIG at it).
+# Every adapter is chosen here; nothing in the code needs to change to swap one.
+# ${VAR} is replaced from the environment.
+
+data_dir: ~/.techpub-studio          # projects, runs and published files (plain JSON + files on disk)
+
+converter:
+  kind: occ                          # occ: Open CASCADE, runs anywhere | exe: the legacy cad-step-to-glb.exe (Windows)
+  quality: balanced                  # fast | balanced | precise (tessellation)
+  # exe_path: engine/cad-step-to-glb.exe
+
+llm:
+  provider: none                     # none | ollama | openai (any OpenAI-compatible server) | bedrock | anthropic
+                                     # usually set in the app: Settings -> Language model (it overrides this)
+  # base_url: http://127.0.0.1:11434/v1   # ollama (offline): ollama pull qwen2.5:7b
+  # model: qwen2.5:7b
+  # batch_size: 8                    # steps per request (small local models: 6-10)
+  # endpoint_url: https://vpce-...bedrock-runtime.eu-west-3.vpce.amazonaws.com   # bedrock through a VPC endpoint
+  # model: claude-sonnet-4-5         # anthropic: ANTHROPIC_API_KEY
+  # model: eu.anthropic.claude-sonnet-4-5-20250929-v1:0   # bedrock: AWS credentials, AWS_REGION, BEDROCK_VPCE_DNS
+  # base_url: http://127.0.0.1:11434/v1                  # openai-compatible: STUDIO_LLM_API_KEY
+  # The LLM only rewords steps. Every reworded step goes through the STE checker and the fact check
+  # (items, quantities, torques); a step that fails keeps the template wording.
+
+connectors:
+  - kind: folder                     # writes every output to a folder (TechPub import, PLM drop folder, review)
+    path: ./published
+  # - kind: plm                      # any other destination plugs in by class (see README, Configuration)
+  #   class: mycompany.studio_plm:PlmConnector
+  #   url: https://plm.example/api
+
+# Schema packages, BREX, rule sets and stylesheets are managed in the app (Schemas and rules) and stored
+# under <data_dir>/conformance.
+
+defaults:                            # per-project defaults; each project can override them in its settings
+  manuf_prefix: null                 # auto-detected from the STEP part numbers (e.g. F6137)
+  publication:
+    model_ident_code: TECHPUB
+    enterprise_code: ""
+    enterprise_name: ""
+    ata_chapter: "32"
+    ata_section: "42"
+    ata_subject: "11"
+
+roles:
+  extra_rules: []                    # [[role, pn|name, regex], ...] checked before the built-in rules
+  # - [seal, name, '\bQUAD[- ]?RING\b']

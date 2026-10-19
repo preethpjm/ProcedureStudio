@@ -1,0 +1,33 @@
+# Example rule file for S1000D procedures. Install it under Schemas and rules -> Rule sets.
+# Each rule: id, context (XPath), and one of assert / forbid / allowed / pattern. See README "Rules".
+id: house-rules-s1000d
+name: House rules for S1000D procedures
+applies_to:
+  standards: [S1000D]
+  doc_types: [proced]
+rules:
+  - id: HR-001
+    severity: error
+    context: //proceduralStep[para]
+    assert: "string-length(normalize-space(para)) - string-length(translate(normalize-space(para), ' ', '')) + 1 <= 20"
+    message: An instruction has at most 20 words (ASD-STE100 rule 5.1).
+    suggestion: Split the step into two steps.
+  - id: HR-002
+    context: //para
+    forbid: "contains(., ';')"
+    message: Do not use semicolons in procedure text.
+  - id: HR-004
+    context: //security
+    attribute: securityClassification
+    allowed: ["01"]
+    message: Procedures are published unclassified (security classification 01).
+  - id: HR-005
+    severity: warning
+    context: //proceduralStep/proceduralStep
+    assert: "not(proceduralStep/proceduralStep/proceduralStep)"
+    message: Keep procedural steps to four levels.
+  - id: HR-006
+    context: //warningAndCautionPara
+    pattern: '^[^a-z]+$'
+    severity: warning
+    message: Warnings and cautions are written in capital letters.

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC subset of the S1000D Issue 4.2 content model, written for TechPub Procedure Studio tests.
+     Covers only the elements the studio generates (identAndStatusSection, procedure, IPD) in the
+     official element order. Not the official S1000D schema: install the official package for real work. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="dmCode"><xs:complexType>
+    <xs:attribute name="modelIdentCode" use="required"/><xs:attribute name="systemDiffCode" use="required"/>
+    <xs:attribute name="systemCode" use="required"/><xs:attribute name="subSystemCode" use="required"/>
+    <xs:attribute name="subSubSystemCode" use="required"/><xs:attribute name="assyCode" use="required"/>
+    <xs:attribute name="disassyCode" use="required"/><xs:attribute name="disassyCodeVariant" use="required"/>
+    <xs:attribute name="infoCode" use="required"/><xs:attribute name="infoCodeVariant" use="required"/>
+    <xs:attribute name="itemLocationCode" use="required"/></xs:complexType></xs:element>
+  <xs:element name="identAndStatusSection"><xs:complexType><xs:sequence>
+    <xs:element name="dmAddress"><xs:complexType><xs:sequence>
+      <xs:element name="dmIdent"><xs:complexType><xs:sequence>
+        <xs:element ref="dmCode"/>
+        <xs:element name="language"><xs:complexType><xs:attribute name="languageIsoCode" use="required"/><xs:attribute name="countryIsoCode" use="required"/></xs:complexType></xs:element>
+        <xs:element name="issueInfo"><xs:complexType><xs:attribute name="issueNumber" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="\d{3}"/></xs:restriction></xs:simpleType></xs:attribute><xs:attribute name="inWork" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="\d{2}"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+      </xs:sequence></xs:complexType></xs:element>
+      <xs:element name="dmAddressItems"><xs:complexType><xs:sequence>
+        <xs:element name="issueDate"><xs:complexType><xs:attribute name="year" use="required"/><xs:attribute name="month" use="required"/><xs:attribute name="day" use="required"/></xs:complexType></xs:element>
+        <xs:element name="dmTitle"><xs:complexType><xs:sequence><xs:element name="techName" type="xs:string"/><xs:element name="infoName" type="xs:string" minOccurs="0"/></xs:sequence></xs:complexType></xs:element>
+      </xs:sequence></xs:complexType></xs:element>
+    </xs:sequence></xs:complexType></xs:element>
+    <xs:element name="dmStatus"><xs:complexType><xs:sequence>
+      <xs:element name="security"><xs:complexType><xs:attribute name="securityClassification" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="\d{2}"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+      <xs:element name="dataRestrictions" minOccurs="0"><xs:complexType><xs:sequence><xs:any processContents="skip" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>
+      <xs:element name="responsiblePartnerCompany" type="enterprise"/>
+      <xs:element name="originator" type="enterprise"/>
+      <xs:element name="applic"><xs:complexType><xs:sequence><xs:element name="displayText"><xs:complexType><xs:sequence><xs:element name="simplePara" type="xs:string" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
+      <xs:element name="brexDmRef"><xs:complexType><xs:sequence><xs:element ref="dmRef"/></xs:sequence></xs:complexType></xs:element>
+      <xs:element name="qualityAssurance"><xs:complexType><xs:choice><xs:element name="unverified"><xs:complexType/></xs:element><xs:element name="firstVerification"><xs:complexType><xs:attribute name="verificationType"/></xs:complexType></xs:element></xs:choice></xs:complexType></xs:element>
+    </xs:sequence><xs:attribute name="issueType"/></xs:complexType></xs:element>
+  </xs:sequence></xs:complexType></xs:element>
+  <xs:complexType name="enterprise"><xs:sequence><xs:element name="enterpriseName" type="xs:string" minOccurs="0"/></xs:sequence>
+    <xs:attribute name="enterpriseCode" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="[A-Z0-9]{5}"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
+  <xs:element name="dmRef"><xs:complexType><xs:sequence><xs:element name="dmRefIdent"><xs:complexType><xs:sequence><xs:element ref="dmCode"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>
+  <xs:element name="warningAndCautionPara" type="xs:string"/>
+  <xs:element name="warning"><xs:complexType><xs:sequence><xs:element ref="warningAndCautionPara" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="id" type="xs:ID"/></xs:complexType></xs:element>
+  <xs:element name="caution"><xs:complexType><xs:sequence><xs:element ref="warningAndCautionPara" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="id" type="xs:ID"/></xs:complexType></xs:element>
+  <xs:element name="para"><xs:complexType mixed="true"><xs:choice minOccurs="0" maxOccurs="unbounded"><xs:element name="internalRef"><xs:complexType><xs:attribute name="internalRefId" type="xs:IDREF"/><xs:attribute name="internalRefTargetType"/></xs:complexType></xs:element><xs:element ref="dmRef"/></xs:choice></xs:complexType></xs:element>
+</xs:schema>
