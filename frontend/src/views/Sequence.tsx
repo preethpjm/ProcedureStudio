@@ -62,17 +62,49 @@ export function SequenceView() {
   const broken = new Set<string>();
   steps.forEach((s, i) => (blockers.get(s.unit) ?? []).forEach((b) => { if ((pos.get(b) ?? -1) > i) broken.add(s.unit); }));
 
-  // viewer
+  // identical parts on the same level are one entry with a quantity: the same item, attaching the same item (or
+  // removed from the same item), with the same fitted parts, one part each (sub-assemblies are never merged).
+  // Washers go on the line of the screws they sit under. The 3D keeps one step per part (each moves on its own).
+  const itemOf = (unit: string | undefined): string => {
+    if (!unit) return "";
+    const st = (seq?.disassembly ?? []).find((x: Json) => x.unit === unit);
+    return (st ? name(st).item || name(st).text : rowByOcc.get(unit)?.item) ?? unit;
+  };
+  const keyOf = (s: Json) => [name(s).item || name(s).text, s.role, s.members.length > 1 ? s.unit : "",
+    s.attaches ? "att:" + itemOf(s.attaches) : "on:" + itemOf(s.on),
+    (s.riders ?? []).map((r: string) => rowByOcc.get(r)?.item ?? r.replace(/_\d+$/, "")).sort().join(",")].join("|");
+  const groups = useMemo(() => {
+    type G = { index: number; start: number; steps: Json[]; main: Json[]; with: Json[][] };
+    const out: G[] = [];
+    let at = 0;
+    steps.forEach((s) => {
+      const g = out[out.length - 1];
+      const tail = g ? (g.with.length ? g.with[g.with.length - 1] : g.main) : null;
+      if (g && tail && keyOf(tail[0]) === keyOf(s)) {
+        tail.push(s); g.steps.push(s);
+      } else if (g && s.role === "washer" && s.attaches && ["fastener", "nut"].includes(g.main[0].role)
+                 && itemOf(g.main[0].attaches) === itemOf(s.attaches)) {
+        g.with.push([s]); g.steps.push(s);               // the washers under these screws
+      } else {
+        out.push({ index: out.length, start: at, steps: [s], main: [s], with: [] });
+      }
+      at += 1;
+    });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [steps, rowByOcc]);
+
+  // viewer: the slider moves one entry at a time
   useEffect(() => {
     if (!seq) return;
     const hidden = new Set<string>();
-    steps.slice(0, cur).forEach((s) => [...s.members, ...(s.riders ?? [])].forEach((m: string) => hidden.add(m)));
-    const active = focus ? steps.find((s) => s.unit === focus) : steps[cur] ?? null;
-    const sel = new Set<string>(active ? [...active.members, ...(active.riders ?? [])] : []);
+    groups.slice(0, cur).forEach((g) => g.steps.forEach((s) => [...s.members, ...(s.riders ?? [])].forEach((m: string) => hidden.add(m))));
+    const active = focus ? groups.find((g) => g.steps.some((s) => s.unit === focus)) : groups[cur] ?? null;
+    const sel = new Set<string>(active ? active.steps.flatMap((s) => [...s.members, ...(s.riders ?? [])]) : []);
     const ex = new Map<string, [number, number, number]>();
     steps.forEach((s) => [...s.members, ...(s.riders ?? [])].forEach((m: string) => ex.set(m, s.direction)));
     setScene({ selected: sel, hidden, explode: ex, explodeAmount: explode, tint: undefined, dim: null });
-  }, [seq, steps, cur, explode, focus, setScene]);
+  }, [seq, steps, groups, cur, explode, focus, setScene]);
   useEffect(() => () => setScene({ hidden: undefined, explode: undefined, explodeAmount: 0 }), [setScene]);
 
   useEffect(() => {
@@ -84,19 +116,6 @@ export function SequenceView() {
     return () => { pickHandler.current = null; };
   }, [steps, pickHandler]);
 
-  // identical parts removed one after the other (four screws of the same item, same part, same direction) show as one row
-  const groups = useMemo(() => {
-    const out: { index: number; start: number; steps: Json[] }[] = [];
-    steps.forEach((s, i) => {
-      const g = out[out.length - 1];
-      const p = g?.steps[g.steps.length - 1];
-      const same = p && name(p).item && name(p).item === name(s).item && p.attaches === s.attaches
-        && p.direction_label === s.direction_label && !(s.riders?.length) && !(p.riders?.length);
-      if (same) g.steps.push(s); else out.push({ index: out.length, start: i, steps: [s] });
-    });
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps, rowByOcc]);
   const moveGroup = (gi: number, d: number) => {
     const j = gi + d;
     if (j < 0 || j >= groups.length) return;
@@ -121,13 +140,13 @@ export function SequenceView() {
     <div className="view sequence">
       <header className="view-head">
         <h1>Disassembly sequence</h1>
-        <p className="lede-s">{steps.length} removal steps worked out from contacts and blocking directions in the 3D model, part by part: each part comes off right after its attaching parts.
+        <p className="lede-s">{groups.length} removal steps ({steps.length} parts) worked out from contacts and blocking directions in the 3D model, part by part: each part comes off right after its attaching parts, and identical parts are one step.
           {seq.conflicts?.length ? ` ${seq.conflicts.length} parts could not be freed and were forced.` : " Every part comes free."}
           {seq.writer_order ? " The order was changed by a writer." : ""}</p>
         <div className="scrub">
           <label htmlFor="scrub">After step</label>
-          <input id="scrub" type="range" min={0} max={steps.length} value={cur} onChange={(e) => { setCur(+e.target.value); setFocus(null); }} />
-          <output>{cur === 0 ? "Assembled" : `${cur} of ${steps.length}`}</output>
+          <input id="scrub" type="range" min={0} max={groups.length} value={cur} onChange={(e) => { setCur(+e.target.value); setFocus(null); }} />
+          <output>{cur === 0 ? "Assembled" : `${cur} of ${groups.length}`}</output>
           <label htmlFor="explode">Explode</label>
           <input id="explode" type="range" min={0} max={1} step={0.02} value={explode} onChange={(e) => setExplode(+e.target.value)} />
         </div>
@@ -140,30 +159,37 @@ export function SequenceView() {
       </div>}
       <ol className="seq-list">
         {groups.map((g) => {
-          const s = g.steps[0], i = g.start, last = g.start + g.steps.length - 1;
+          const s = g.steps[0];
           const n = name(s);
           const units = g.steps.map((x) => x.unit);
-          const isCur = cur >= i && cur <= last && !focus, isFocus = !!focus && units.includes(focus), done = last < cur;
+          const isCur = cur === g.index && !focus, isFocus = !!focus && units.includes(focus), done = g.index < cur;
           const isBroken = units.some((u) => broken.has(u)), forced = g.steps.some((x) => x.forced);
+          const dirs = [...new Set(g.steps.map((x) => x.direction_label as string))];
+          const held = [...new Set(g.main.map((x) => x.attaches).filter(Boolean))] as string[];
+          const ons = [...new Set(g.main.map((x) => x.on).filter(Boolean))] as string[];
+          const riders = g.main.reduce((k, x) => k + (x.riders?.length ?? 0), 0);
           return (
             <li key={s.unit} id={`seq-${s.unit}`} className={[isCur && "cur", isFocus && "focus", done && "done", isBroken && "broken", forced && "forced",
               s.attaches && "att", s.attached_by?.length && "held"].filter(Boolean).join(" ")}
               onClick={() => { setFocus(isFocus ? null : s.unit); }}>
-              <span className="seq-no">{g.steps.length > 1 ? `${i + 1}–${last + 1}` : i + 1}</span>
+              <span className="seq-no">{g.index + 1}</span>
               <span className="seq-what">
                 <span className="seq-name">{n.item && <span className="item-no">{n.item}</span>}{n.text}
-                  {g.steps.length > 1 && <span className="seq-qty"> × {g.steps.length}</span>}
+                  {g.main.length > 1 && <span className="seq-qty"> × {g.main.length}</span>}
+                  {g.with.map((w) => { const wn = name(w[0]); return <span key={w[0].unit} className="seq-with"> and {wn.text.toLowerCase()}{wn.item && ` (${wn.item})`}{w.length > 1 && <span className="seq-qty"> × {w.length}</span>}</span>; })}
                   {s.members.length > 1 && <span className="fine"> (sub-assembly, {s.members.length} parts)</span>}</span>
                 <span className="seq-meta">
-                  {s.attaches && <>Attaching part of {partName(s.attaches)} · </>}
-                  {s.attached_by?.length > 0 && <>After its attaching parts · </>}
-                  Out along {s.direction_label}
-                  {(s.riders?.length ?? 0) > 0 && ` · carries ${s.riders.length} fitted parts`}
+                  {held.length > 0 && <>Attaching parts of {partName(held[0])}{held.length > 1 ? ` × ${held.length}` : ""} · </>}
+                  {s.attached_by?.length > 0 && <>After {g.main.length > 1 ? "their" : "its"} attaching parts · </>}
+                  {!held.length && ons.length > 0 && <>Off the {partName(ons[0])} · </>}
+                  Out along {dirs.join(", ")}{dirs.length === 1 && DIR_FROM[s.direction_from] ? ` (${DIR_FROM[s.direction_from]})` : ""}
+                  {s.check && !forced && <span className="warn-t"> · {s.check}</span>}
+                  {riders > 0 && ` · carries ${riders} fitted parts`}
                   {forced && <span className="warn-t"> · forced: no free direction found</span>}
                   {isBroken && <span className="warn-t"> · blocked by a later step</span>}
                 </span>
               </span>
-              <span className="dir" aria-hidden>{arrow(s.direction_label)}</span>
+              <span className="dir" aria-hidden>{dirs.map(arrow).join(" ")}</span>
               {editable && <span className="mv">
                 <button className="icon" aria-label="Move earlier" onClick={(e) => { e.stopPropagation(); moveGroup(g.index, -1); }} disabled={g.index === 0}>▲</button>
                 <button className="icon" aria-label="Move later" onClick={(e) => { e.stopPropagation(); moveGroup(g.index, 1); }} disabled={g.index === groups.length - 1}>▼</button>
@@ -176,5 +202,7 @@ export function SequenceView() {
     </div>
   );
 }
+
+const DIR_FROM: Record<string, string> = { head: "head first", nut: "towards the bolt end", axis: "along its axis", model: "lifted off" };
 
 const arrow = (d: string) => ({ "+X": "→", "-X": "←", "+Y": "↗", "-Y": "↙", "+Z": "↑", "-Z": "↓" } as Record<string, string>)[d] ?? "•";

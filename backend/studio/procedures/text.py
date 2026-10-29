@@ -15,7 +15,7 @@ import re
 WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
 ROLE_NOUN = {"fastener": "screw", "washer": "washer", "nut": "nut", "seal": "packing", "backup_ring": "back-up ring",
              "insert": "insert", "press_plug": "expansion plug", "cap": "protective cap", "lockwire": "safety cable",
-             "spring": "spring", "bush": "bush"}
+             "spring": "spring", "bush": "bush", "dowel": "dowel pin"}
 IRREGULAR = {"bush": "bushes", "packing": "packings", "body": "bodies", "assembly": "assemblies"}
 
 

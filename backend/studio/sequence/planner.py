@@ -14,10 +14,21 @@
    group's front-facing surface (normal · d > 0.25) along d; any hit on another remaining
    unit blocks the move. Rays that start inside another part (threads, press fits) always
    hit it, so buried parts are correctly blocked sideways.
+   The test runs both ways: rays from the moving unit's leading faces, and rays from each
+   obstacle's faces that face it, cast backwards, so a part buried in the mover (a screw shank
+   inside a bracket) blocks it too. Ray start points are spread over the whole surface (one per
+   grid cell, plus extra points on big triangles), so small faces such as hole walls are kept.
+
+   Directions are tried in groups, the part's natural way out first: a screw only head first
+   (its wide end, from the mesh), a nut towards the free end of its bolt, a fitting / plug / bush
+   wide end first; then the part's own cylinder axes and shared axes; the six model axes last.
+   Among the free directions of a group, one that lifts the part off what it sits on beats one
+   that slides it along it; then the most outward. A part that can only slide out is flagged.
 5. All units free at the start of a layer are removed in that layer, in role order
-   (caps → lock wire → fasteners → washers → closures → fittings → …). If nothing is free,
-   the unit with the fewest blockers is removed and the step is flagged as a conflict for
-   the writer to review.
+   (caps → lock wire → fasteners → washers → closures → fittings → …), a part before the part
+   it sits on. Each step records that part (``on``): what it is removed from, and installed on.
+   If nothing is free, the unit with the fewest blockers is removed and the step is flagged as a
+   conflict for the writer to review.
 
 Assembly is the reverse of disassembly. The result is a proposal: the writer can reorder
 it in the UI, and the precedence list says which moves the geometry forbids.
@@ -35,7 +46,7 @@ ROLE_ORDER = ["cap", "lockwire", "fastener", "nut", "washer", "closure", "fittin
               "moving", "seal", "backup_ring", "part", "housing"]
 AXES = {"+X": (1, 0, 0), "-X": (-1, 0, 0), "+Y": (0, 1, 0), "-Y": (0, -1, 0), "+Z": (0, 0, 1), "-Z": (0, 0, -1)}
 RIDER_ROLES_CARRIED = {"seal", "backup_ring"}
-PERMANENT_ROLES = {"insert", "press_plug", "plate"}
+PERMANENT_ROLES = {"insert", "press_plug", "plate", "dowel"}
 
 
 @dataclass
@@ -57,6 +68,17 @@ def _label(d: np.ndarray) -> str:
     if float(np.dot(d, best[1])) > 0.999:
         return best[0]
     return "axis(" + ", ".join(f"{v:.2f}" for v in d) + ")"
+
+
+def _intersector(mesh):
+    """Embree (``pip install embreex``) when it is there: about 50 times faster than trimesh's own ray caster,
+    which matters on big assemblies. Same answers; the pure-Python caster is the fallback."""
+    try:
+        from trimesh.ray.ray_pyembree import RayMeshIntersector as Fast
+        return Fast(mesh)
+    except Exception:                                   # embreex not installed, or no wheel for this platform
+        from trimesh.ray.ray_triangle import RayMeshIntersector
+        return RayMeshIntersector(mesh)
 
 
 class _MeshCache:
@@ -91,8 +113,7 @@ class _MeshCache:
             if m is None:
                 self._ray[key] = None
             else:
-                from trimesh.ray.ray_triangle import RayMeshIntersector
-                self._ray[key] = RayMeshIntersector(m)
+                self._ray[key] = _intersector(m)
         return self._ray[key]
 
 
@@ -179,6 +200,57 @@ def build_units(model: dict, roles: dict[str, dict], contacts: list[dict]) -> tu
     return units, base, ignored
 
 
+HEADED_ROLES = {"fastener", "fitting", "closure", "bush"}     # the wide end leads: head, hex, flange
+SUPPORT_ROLES_SKIP = {"fastener", "nut", "washer", "lockwire", "seal", "backup_ring"}
+
+
+def head_direction(occ: dict, mesh) -> np.ndarray | None:
+    """Unit vector along the part's main cylinder axis towards its wide end (screw head, fitting hex, bush
+    flange), or None when both ends are about as wide (pin, stud, nut)."""
+    cyls = sorted((occ.get("geometry") or {}).get("cylinders", []),
+                  key=lambda f: -(f["faces"] * max(f.get("length") or 1, 1)))
+    if not cyls or mesh is None or len(mesh[0]) < 8:
+        return None
+    a = np.asarray(cyls[0]["dir"], float)
+    a /= np.linalg.norm(a)
+    p = np.asarray(cyls[0]["point"], float)
+    w = np.asarray(mesh[0], float) - p
+    t = w @ a
+    r = np.linalg.norm(w - np.outer(t, a), axis=1)
+    lo, hi = float(t.min()), float(t.max())
+    span = hi - lo
+    if span <= 1e-6:
+        return None
+    r_lo = float(r[t <= lo + 0.2 * span].max())
+    r_hi = float(r[t >= hi - 0.2 * span].max())
+    if r_hi > 1.25 * r_lo:
+        return a
+    if r_lo > 1.25 * r_hi:
+        return -a
+    return None
+
+
+def _spread_faces(centres: np.ndarray, areas: np.ndarray, k: int) -> np.ndarray:
+    """Indices of up to ~k faces covering the surface evenly: one face per grid cell (the largest), so small
+    faces at their own place (hole walls, shoulders, bosses) are kept, then the largest of the rest."""
+    n = len(centres)
+    if n <= k:
+        return np.arange(n)
+    cell = max(float(np.sqrt(areas.sum() / k)), 1e-6)
+    keys = np.floor(centres / cell).astype(np.int64)
+    order = np.lexsort((-areas, keys[:, 2], keys[:, 1], keys[:, 0]))
+    ks = keys[order]
+    first = np.ones(len(order), dtype=bool)
+    first[1:] = np.any(ks[1:] != ks[:-1], axis=1)
+    picked = order[first]
+    if len(picked) > k:
+        picked = picked[np.linspace(0, len(picked) - 1, k).astype(int)]
+    elif len(picked) < k:
+        rest = np.setdiff1d(np.argsort(-areas), picked, assume_unique=False)[: k - len(picked)]
+        picked = np.concatenate([picked, rest])
+    return np.unique(picked)
+
+
 def plan_disassembly(model: dict, meshes: dict, roles: dict[str, dict], contacts: list[dict],
                      max_rays: int = 700) -> dict:
     by_id = {o["occ_id"]: o for o in model["occurrences"]}
@@ -192,48 +264,157 @@ def plan_disassembly(model: dict, meshes: dict, roles: dict[str, dict], contacts
 
     member_unit = {m: u.id for u in units.values() for m in u.members}
 
-    def candidate_dirs(u: Unit) -> list[np.ndarray]:
-        dirs: list[np.ndarray] = []
+    def top(uid: str | None) -> str | None:
+        return (units[uid].carrier or uid) if uid in units else None
+
+    # unit-level contact neighbours
+    neighbours: dict[str, set[str]] = {}
+    for c in contacts:
+        ua, ub = top(member_unit.get(c["a"])), top(member_unit.get(c["b"]))
+        if ua and ub and ua != ub:
+            neighbours.setdefault(ua, set()).add(ub)
+            neighbours.setdefault(ub, set()).add(ua)
+
+    # caches: per-unit box (what it moves), coaxial axes, the bolts a nut sits on, candidate directions
+    all_ids = sorted(units)
+    idx = {uid: i for i, uid in enumerate(all_ids)}
+    all_boxes = np.full((len(all_ids), 6), np.nan)
+    for uid in all_ids:
+        b = _aabb(by_id, units[uid].moving())
+        if b is not None:
+            all_boxes[idx[uid]] = b
+    base_box = _aabb(by_id, units[base].members)
+    coax_dirs: dict[str, list[np.ndarray]] = {}
+    bolts_of: dict[str, list[str]] = {}
+    for c in contacts:
+        if not c["coaxial"]:
+            continue
+        ua, ub = member_unit.get(c["a"]), member_unit.get(c["b"])
+        for x, y in ((ua, ub), (ub, ua)):
+            if x:
+                coax_dirs.setdefault(x, []).append(np.array(c["axes"][0]["dir"], float))
+            if x in units and y in units and units[y].role == "fastener":
+                bolts_of.setdefault(x, []).append(y)
+    groups_cache: dict[str, list] = {}
+
+    def ubox(uid: str) -> np.ndarray | None:
+        b = all_boxes[idx[uid]]
+        return None if np.isnan(b[0]) else b
+
+    def main_member(u: Unit) -> str:
+        return max(u.members, key=lambda m: (by_id[m].get("geometry") or {}).get("volume_mm3") or 0)
+
+    head_cache: dict[str, np.ndarray | None] = {}
+
+    def head_of(u: Unit) -> np.ndarray | None:
+        if u.id not in head_cache:
+            m = main_member(u)
+            head_cache[u.id] = head_direction(by_id[m], meshes.get(m)) if u.role in HEADED_ROLES else None
+        return head_cache[u.id]
+
+    def nut_direction(u: Unit) -> np.ndarray | None:
+        """A nut comes off towards the free end of its bolt: away from the bolt head."""
+        for other in bolts_of.get(u.id, []):
+            h = head_of(units[other])
+            if h is not None:
+                return -h
+        return None
+
+    def outward(u: Unit) -> np.ndarray | None:
+        bb, ub = base_box, ubox(u.id)
+        if bb is None or ub is None:
+            return None
+        away = (ub[:3] + ub[3:]) / 2 - (bb[:3] + bb[3:]) / 2
+        n = float(np.linalg.norm(away))
+        return away / n if n > 1e-6 else None
+
+    def candidate_groups(u: Unit) -> list[tuple[str, list[np.ndarray]]]:
+        """Directions to try, in groups: the part's natural way out first, the model axes last. Inside a group,
+        the most outward first."""
+        if u.id in groups_cache:
+            return groups_cache[u.id]
+        groups_cache[u.id] = _candidate_groups(u)
+        return groups_cache[u.id]
+
+    def _candidate_groups(u: Unit) -> list[tuple[str, list[np.ndarray]]]:
+        seen: list[np.ndarray] = []
+
+        def uniq(ds):
+            out = []
+            for d in ds:
+                d = np.asarray(d, float)
+                d = d / np.linalg.norm(d)
+                if not any(float(np.dot(d, o)) > 0.999 for o in seen):
+                    seen.append(d)
+                    out.append(d)
+            return out
+
+        away = outward(u)
+
+        def by_out(ds):
+            return sorted(ds, key=lambda d: -float(np.dot(d, away))) if away is not None else ds
+
+        groups: list[tuple[str, list[np.ndarray]]] = []
+        head = head_of(u)
+        if u.role == "nut":
+            nd = nut_direction(u)
+            if nd is not None:
+                groups.append(("nut", uniq([nd])))
+        if head is not None:
+            groups.append(("head", uniq([head])))
+            if u.role == "fastener":
+                return groups                     # a screw comes out head first, or not at all
+        axes = []
         for m in u.members:
             for f in sorted((by_id[m].get("geometry") or {}).get("cylinders", []),
                             key=lambda f: -(f["faces"] * max(f.get("length") or 1, 1)))[:2]:
-                dirs.append(np.array(f["dir"], float))
-        for c in contacts:
-            if c["coaxial"] and (member_unit.get(c["a"]) == u.id or member_unit.get(c["b"]) == u.id):
-                dirs.append(np.array(c["axes"][0]["dir"], float))
-        dirs += [np.array(v, float) for v in AXES.values()]
-        out: list[np.ndarray] = []
-        for d in dirs:
-            for s in (d, -d):
-                s = s / np.linalg.norm(s)
-                if not any(float(np.dot(s, o)) > 0.999 for o in out):
-                    out.append(s)
-        # outward first: prefer directions pointing away from the base's centre
-        bb = _aabb(by_id, units[base].members)
-        ub = _aabb(by_id, u.moving())
-        if bb is not None and ub is not None:
-            away = (ub[:3] + ub[3:]) / 2 - (bb[:3] + bb[3:]) / 2
-            if np.linalg.norm(away) > 1e-6:
-                away /= np.linalg.norm(away)
-                axial = len(out) - 6 * 2  # keep feature axes first, then sort each group by outwardness
-                out = sorted(out, key=lambda d: -float(np.dot(d, away)))
-        return out
+                axes.append(np.array(f["dir"], float))
+        axes += coax_dirs.get(u.id, [])
+        both = [s for d in axes for s in (d, -d)]
+        if head is not None:                      # never the narrow end first along the head axis
+            both = [d for d in both if float(np.dot(d / np.linalg.norm(d), head)) > -0.999]
+        g = uniq(by_out(both))
+        if g:
+            groups.append(("axis", g))
+        g = uniq(by_out([np.array(v, float) for v in AXES.values()]))
+        if g:
+            groups.append(("model", g))
+        return groups
 
-    def origins(u: Unit, d: np.ndarray):
-        m = cache.group("mv:" + u.id, u.moving())
+    origin_cache: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+
+    def origins(key: str, occs: list[str], d: np.ndarray):
+        """Ray start points on the faces of ``occs`` that face ``d``, spread over the whole surface."""
+        ck = (key, tuple(np.round(d, 4)))
+        if ck in origin_cache:
+            return origin_cache[ck]
+        m = cache.group(key, occs)
         if m is None:
+            origin_cache[ck] = None
             return None
         n = m.face_normals
         front = np.where(n @ d > 0.25)[0]
         if len(front) == 0:
-            return np.zeros((0, 3))
-        if len(front) > max_rays:
-            # keep the largest faces plus an even spread, deterministically
+            res = np.zeros((0, 3))
+        else:
+            cen = m.triangles_center[front]
             areas = m.area_faces[front]
-            big = front[np.argsort(-areas)[: max_rays // 2]]
-            spread = front[np.linspace(0, len(front) - 1, max_rays // 2).astype(int)]
-            front = np.unique(np.concatenate([big, spread]))
-        return m.triangles_center[front] + n[front] * 0.02
+            pick = front[_spread_faces(cen, areas, max_rays)]
+            pts = [m.triangles_center[pick]]
+            # big triangles: three more points, halfway to each corner, so a small obstacle over part of a
+            # large flat face is not missed by the single centre ray
+            cell2 = float(areas.sum()) / max_rays
+            big = pick[m.area_faces[pick] > 4 * cell2]
+            if len(big):
+                tri = m.triangles[big]
+                c = m.triangles_center[big][:, None, :]
+                pts.append(((tri + c) / 2).reshape(-1, 3))
+                nrm = np.repeat(n[big], 3, axis=0)
+                res = np.vstack(pts) + np.vstack([n[pick], nrm]) * 0.02
+            else:
+                res = pts[0] + n[pick] * 0.02
+        origin_cache[ck] = res
+        return res
 
     # shared fit axes between units: threads, press fits and bores look like overlaps in CAD,
     # so a part may slide along such an axis through its own engagement zone
@@ -276,60 +457,115 @@ def plan_disassembly(model: dict, meshes: dict, roles: dict[str, dict], contacts
             mask |= radial <= ax["r_max"] + 0.35
         return mask
 
-    def blockers(u: Unit, d: np.ndarray, rem: set[str]) -> list[str]:
-        org = origins(u, d)
-        if org is None or len(org) == 0:
-            return []
-        ub = _aabb(by_id, u.moving())
+    def hit_counts(u: Unit, d: np.ndarray, rem) -> dict[str, int]:
+        """How many rays hit each unit in ``rem`` when ``u`` moves along d. Both ways: rays from the faces of u
+        that lead the move, and rays from the obstacle's faces that face u, cast backwards. The second catches
+        what is buried in u (a screw shank inside a bracket), which no ray from u's own surface can see."""
+        org = origins("mv:" + u.id, u.moving(), d)
+        ub = ubox(u.id)
+        if ub is None:
+            return {}
         sw = _swept(ub, d, diag)
-        found = []
-        for oid in sorted(rem):
-            if oid == u.id:
-                continue
+        mine = cache.ray("mv:" + u.id, u.moving())
+        found: dict[str, int] = {}
+        # obstacles whose box meets the swept box, all at once
+        cand = [oid for oid in rem if oid != u.id and oid in idx]
+        if not cand:
+            return found
+        bx = all_boxes[[idx[o] for o in cand]]
+        hit = np.all(sw[:3] - 0.01 <= bx[:, 3:], axis=1) & np.all(bx[:, :3] - 0.01 <= sw[3:], axis=1)
+        for oid in sorted(o for o, h in zip(cand, hit) if h):
             o = units[oid]
-            ob = _aabb(by_id, o.moving())
-            if ob is None or not _overlap(sw, ob):
-                continue
+            n = 0
             r = cache.ray("ob:" + oid, o.moving())
-            if r is None:
-                continue
-            keep = ~engagement_mask(u.id, oid, org, d)
-            if not keep.any():
-                continue
-            o2 = org[keep]
-            if bool(np.any(r.intersects_any(o2, np.repeat(d[None, :], len(o2), axis=0)))):
-                found.append(oid)
+            if r is not None and org is not None and len(org):
+                keep = ~engagement_mask(u.id, oid, org, d)
+                if keep.any():
+                    o2 = org[keep]
+                    n += int(np.count_nonzero(r.intersects_any(o2, np.repeat(d[None, :], len(o2), axis=0))))
+            if mine is not None:
+                back = origins("ob:" + oid, o.moving(), -d)
+                if back is not None and len(back):
+                    # only the obstacle's faces inside the swept volume of u can be reached
+                    inside = np.all((back >= sw[:3] - 0.01) & (back <= sw[3:] + 0.01), axis=1)
+                    back = back[inside]
+                    if len(back):
+                        keep = ~engagement_mask(u.id, oid, back, d)
+                        b2 = back[keep]
+                        if len(b2):
+                            n += int(np.count_nonzero(mine.intersects_any(b2, np.repeat(-d[None, :], len(b2), axis=0))))
+            if n:
+                found[oid] = n
         return found
+
+    nuts_on: dict[str, set[str]] = {}               # bolt unit -> the nuts screwed on it (coaxial)
+    for c in contacts:
+        ua, ub = member_unit.get(c["a"]), member_unit.get(c["b"])
+        if c["coaxial"] and ua in units and ub in units:
+            for b, n in ((ua, ub), (ub, ua)):
+                if units[b].role == "fastener" and units[n].role == "nut":
+                    nuts_on.setdefault(b, set()).add(n)
+
+    def blockers(u: Unit, d: np.ndarray, rem: set[str]) -> list[str]:
+        found = set(hit_counts(u, d, rem))
+        # the thread lets a bolt turn out of its nut, but the nut comes off first
+        found |= {n for n in nuts_on.get(u.id, ()) if n in rem}
+        return sorted(found)
+
+    def support(u: Unit, d: np.ndarray, rem: set[str]) -> str | None:
+        """The part ``u`` sits on when it leaves along d: the touching part behind it (hit along -d), the one
+        with the most hits. Attaching parts and seals do not count as supports."""
+        near = {n for n in neighbours.get(u.id, set()) if n in rem and n != u.id
+                and units[n].role not in SUPPORT_ROLES_SKIP}
+        if not near:
+            return None
+        hc = hit_counts(u, -d, near)
+        return max(hc, key=lambda k: (hc[k], units[k].volume)) if hc else None
 
     steps, conflicts, precedence = [], [], []
     seen_block: dict[str, dict[str, set[str]]] = {}     # unit -> direction -> every part that ever blocked it there
     layer = 0
-    memo: dict[tuple[str, int], list[str]] = {}
+    memo: dict[tuple, list[str]] = {}
+
+    def test(uid: str, d: np.ndarray) -> list[str]:
+        key = (uid, tuple(np.round(d, 4)))
+        prev = memo.get(key)
+        if prev is not None and any(b in remaining for b in prev):
+            return [b for b in prev if b in remaining]
+        bl = blockers(units[uid], d, remaining)
+        memo[key] = bl
+        return bl
+
+    def choose(u: Unit):
+        """-> (direction or None, the directions tried with their blockers, how it was chosen)."""
+        tried: list[tuple[str, list[str], np.ndarray]] = []
+        for gname, group in candidate_groups(u):
+            ok = []
+            for d in group:
+                bl = test(u.id, d)
+                if bl:
+                    tried.append((_label(d), bl, d))
+                else:
+                    ok.append(d)
+            if ok:
+                # lift off what it sits on rather than slide along it; then the most outward
+                lifts = [d for d in ok if support(u, d, remaining | {base})]
+                kind = "slide" if not lifts and gname == "model" else gname
+                return (lifts or ok)[0], tried, kind
+        return None, tried, None
+
     pending = {u.id for u in movers}
     while pending:
         layer += 1
-        free: list[tuple[Unit, np.ndarray, list[tuple[str, list[str]]]]] = []
-        blocked_info: dict[str, list[tuple[str, list[str]]]] = {}
+        free: list[tuple[Unit, np.ndarray, list, str]] = []
+        blocked_info: dict[str, list] = {}
         for uid in sorted(pending):
             u = units[uid]
-            tried = []
-            chosen = None
-            for k, d in enumerate(candidate_dirs(u)):
-                key = (uid, k)
-                prev = memo.get(key)
-                if prev is not None and any(b in remaining for b in prev):
-                    tried.append((_label(d), [b for b in prev if b in remaining]))
-                    continue
-                bl = blockers(u, d, remaining)
-                memo[key] = bl
-                if not bl:
-                    chosen = d
-                    break
-                tried.append((_label(d), bl))
-            for lab, bl in tried:
+            chosen, tried, kind = choose(u)
+            for lab, bl, _ in tried:
                 seen_block.setdefault(uid, {}).setdefault(lab, set()).update(bl)
             if chosen is not None:
-                free.append((u, chosen, tried))
+                free.append((u, chosen, tried, kind))
             else:
                 blocked_info[uid] = tried
         forced = False
@@ -338,7 +574,7 @@ def plan_disassembly(model: dict, meshes: dict, roles: dict[str, dict], contacts
             merged = False
             for uid in sorted(blocked_info, key=lambda x: units[x].volume):
                 tried = blocked_info[uid]
-                singles = {bl[0] for _, bl in tried if len(bl) == 1}
+                singles = {bl[0] for _, bl, _ in tried if len(bl) == 1}
                 for v in sorted(singles):
                     if v == base or v not in remaining or (uid, v) not in fit_axes:
                         continue
@@ -353,6 +589,17 @@ def plan_disassembly(model: dict, meshes: dict, roles: dict[str, dict], contacts
                         cache._ray.pop(k, None)
                     for k in [k for k in memo if k[0] == v]:
                         memo.pop(k)
+                    for k in [k for k in origin_cache if k[0] in ("mv:" + v, "ob:" + v)]:
+                        origin_cache.pop(k)
+                    nb_ = _aabb(by_id, cv.moving())
+                    if nb_ is not None:
+                        all_boxes[idx[v]] = nb_
+                    groups_cache.pop(v, None)
+                    for n in neighbours.pop(uid, set()):
+                        neighbours.get(n, set()).discard(uid)
+                        if n != v:
+                            neighbours.setdefault(v, set()).add(n)
+                            neighbours.setdefault(n, set()).add(v)
                     merged = True
                     break
                 if merged:
@@ -362,29 +609,58 @@ def plan_disassembly(model: dict, meshes: dict, roles: dict[str, dict], contacts
                 continue
             # deadlock: remove the unit with the fewest distinct blockers and flag it
             def nblk(uid):
-                s = {b for _, bl in blocked_info[uid] for b in bl}
+                s = {b for _, bl, _ in blocked_info[uid] for b in bl}
                 return (len(s), units[uid].volume)
             uid = min(blocked_info, key=nblk)
             u = units[uid]
             best = min(blocked_info[uid], key=lambda t: len(t[1]))
-            d = next(dd for dd in candidate_dirs(u) if _label(dd) == best[0])
-            free = [(u, d, blocked_info[uid])]
+            free = [(u, best[2], blocked_info[uid], "forced")]
             forced = True
             conflicts.append({"unit": uid, "layer": layer, "blocked_by": best[1], "direction": best[0],
                               "message": f"No collision-free direction found; removed along {best[0]} although "
-                                         f"{', '.join(best[1])} still block it. Check the 3D (interference or "
-                                         f"flexible part) and confirm the order."})
+                                         f"{', '.join(best[1])} still block it. Check the 3D (interference, "
+                                         f"flexible part, or a part that needs two moves) and confirm the order."})
         free.sort(key=lambda t: (ROLE_ORDER.index(t[0].role) if t[0].role in ROLE_ORDER else 99, t[0].id))
-        for u, d, tried in free:
+        sits_on = {u.id: support(u, d, remaining) for u, d, _, _ in free}
+        # in one layer, a part comes off before the part it sits on
+        ids = [t[0].id for t in free]
+        for _ in range(len(ids)):
+            moved = False
+            for i, a in enumerate(ids):
+                s = sits_on.get(a)
+                if s in ids and ids.index(s) < i:
+                    ids.insert(ids.index(s), ids.pop(i))
+                    moved = True
+                    break
+            if not moved:
+                break
+        free = sorted(free, key=lambda t: ids.index(t[0].id))
+        for k, (u, d, tried, kind) in enumerate(free):
+            if k and not forced:
+                # parts taken off earlier in this layer may have opened a better way out (the lid that sat on
+                # the bracket is off: the bracket now lifts instead of sliding)
+                d2, tried2, kind2 = choose(u)
+                if d2 is not None:
+                    d, kind = d2, kind2
+                    for lab2, bl2, _ in tried2:
+                        seen_block.setdefault(u.id, {}).setdefault(lab2, set()).update(bl2)
+                    sits_on[u.id] = support(u, d, remaining)
             # a real ordering constraint only along the direction the part actually leaves by: whatever blocked
             # that direction in an earlier layer must come off first (other directions are just alternatives)
             lab = _label(d)
             for b in sorted(seen_block.get(u.id, {}).get(lab, set())):
                 precedence.append({"first": b, "then": u.id, "reason": f"{b} blocks {u.id} along {lab}"})
+            on = sits_on.get(u.id) or (base if base in neighbours.get(u.id, set()) else None)
+            check = None
+            if kind == "slide":
+                check = (f"Slides out along {lab} without lifting off the part it sits on: check for a lip, a clip "
+                         f"or a second move.")
+            elif kind == "forced":
+                check = "No collision-free direction: check the 3D and the order."
             steps.append({"step": len(steps) + 1, "layer": layer, "unit": u.id, "members": u.members,
                           "riders": u.riders, "rider_units": u.rider_units, "role": u.role,
-                          "direction": [round(float(v), 5) for v in d], "direction_label": _label(d),
-                          "forced": forced})
+                          "direction": [round(float(v), 5) for v in d], "direction_label": lab,
+                          "direction_from": kind, "on": on, "check": check, "forced": forced})
             remaining.discard(u.id)
             pending.discard(u.id)
 
@@ -408,7 +684,19 @@ def plan_disassembly(model: dict, meshes: dict, roles: dict[str, dict], contacts
         "layers": max((s["layer"] for s in steps), default=0),
     }
     from .hierarchy import regroup
-    regroup(result, contacts)                    # part by part, each after its attaching parts
+    boxes = {u.id: [float(v) for v in b] for u in units.values() if not u.carrier
+             for b in [_aabb(by_id, u.moving())] if b is not None}
+    regroup(result, contacts, boxes)             # part by part, each after its attaching parts
+    by_step = {s["unit"]: s for s in result["disassembly"]}
+    for s in result["disassembly"]:
+        if s.get("attaches"):                    # attaching parts come off the part they hold
+            s["on"] = s["attaches"]
+        elif s.get("attached_by"):
+            # a part held by screws comes off the part they screw into (not the piston touching the plug)
+            into = [by_step[a].get("threads_into") for a in s["attached_by"] if a in by_step]
+            into = [t for t in into if t and t != s["unit"]]
+            if into:
+                s["on"] = max(set(into), key=into.count)
     result["assembly"] = [{**s, "step": i + 1, "direction": [-v for v in s["direction"]],
                            "direction_label": _label(-np.array(s["direction"]))}
                           for i, s in enumerate(reversed(result["disassembly"]))]

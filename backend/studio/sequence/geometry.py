@@ -61,10 +61,16 @@ def contact_graph(model: dict, meshes: dict, near_mm: float = 0.3, touch_mm: flo
              and o["occ_id"] in meshes]
     objs = build_fcl_objects({o["occ_id"]: meshes[o["occ_id"]] for o in parts})
     contacts = []
-    for a, b in itertools.combinations(parts, 2):
+    # candidate pairs: boxes within near_mm, found all at once (a Python loop over every pair does not scale)
+    bx = np.array([p["geometry"]["bbox"] for p in parts], float).reshape(-1, 6)
+    pairs = []
+    for i in range(len(parts) - 1):
+        lo, hi = bx[i, :3] - near_mm, bx[i, 3:] + near_mm
+        rest = bx[i + 1:]
+        ok = np.all(lo <= rest[:, 3:], axis=1) & np.all(rest[:, :3] <= hi, axis=1)
+        pairs += [(parts[i], parts[i + 1 + j]) for j in np.nonzero(ok)[0]]
+    for a, b in pairs:
         ga, gb = a["geometry"], b["geometry"]
-        if not _aabb_near(ga["bbox"], gb["bbox"], near_mm):
-            continue
         oa, ob = objs.get(a["occ_id"]), objs.get(b["occ_id"])
         if oa is None or ob is None:
             continue

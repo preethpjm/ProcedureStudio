@@ -279,12 +279,30 @@ def build_ipl(model: dict, reconciliation: dict, mbom: list[dict], sequence: dic
     for c in contacts:
         neighbours[c["a"]].add(c["b"])
         neighbours[c["b"]].add(c["a"])
+    # the part each attaching occurrence holds, as the sequence worked it out (head side, not the threaded part)
+    held_members: dict[str, list[str]] = {}
+    for s in sequence.get("disassembly", []):
+        t = s.get("attaches")
+        if t:
+            for o in s["members"]:
+                held_members[o] = (units.get(t) or {}).get("members") or [t]
+
+    def top_row(nr: dict) -> dict:
+        while nr["parent_row"] and next(x for x in rows if x["id"] == nr["parent_row"])["depth"] >= 1:
+            nr = next(x for x in rows if x["id"] == nr["parent_row"])
+        return nr
+
     for row in rows:
         if not row["attaching"] or not row["occ_ids"]:
             continue
         targets: dict[str, int] = defaultdict(int)
         my_step = row["disassembly_step"] or 0
         for o in row["occ_ids"]:
+            held = next((member_row[m] for m in held_members.get(o, []) if m in member_row
+                         and member_row[m] is not row), None)
+            if held is not None:
+                targets[top_row(held)["id"]] += 1
+                continue
             cands = []
             reach = set(neighbours[o])
             for n in list(reach):          # through the washers under this fastener
@@ -307,6 +325,12 @@ def build_ipl(model: dict, reconciliation: dict, mbom: list[dict], sequence: dic
         if targets:
             row["attaching_for"] = max(targets, key=targets.get)
             row["sources"]["attaching_for"] = "3D contacts + sequence"
+            if len(targets) > 1:
+                # one part number, several parts held: the procedures split it per part; the IPL lists it once
+                row["attaching_targets"] = dict(targets)
+                row["flags"].append("Attaches more than one part (" + ", ".join(
+                    f"{n} on {next((x['nomenclature'] for x in rows if x['id'] == t), t)}" for t, n in targets.items())
+                    + "): listed under the one with the most.")
 
     # washers follow the fastener group they sit under
     for row in rows:

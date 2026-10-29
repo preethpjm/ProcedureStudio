@@ -26,6 +26,7 @@ ROLES = {
     "backup_ring": {"label": "Back-up ring", "attaching": False, "permanent": False, "consumable_on_removal": True},
     "insert":     {"label": "Thread insert", "attaching": False, "permanent": True,  "consumable_on_removal": False},
     "press_plug": {"label": "Press-fit plug (Lee plug)", "attaching": False, "permanent": True, "consumable_on_removal": False},
+    "dowel":      {"label": "Dowel / locating pin (stays in its bore)", "attaching": False, "permanent": True, "consumable_on_removal": False},
     "plate":      {"label": "Bonded plate / label", "attaching": False, "permanent": True, "consumable_on_removal": False},
     "fitting":    {"label": "Fitting / union", "attaching": False, "permanent": False, "consumable_on_removal": False},
     "cap":        {"label": "Protective / storage cap", "attaching": False, "permanent": False, "consumable_on_removal": False},
@@ -46,14 +47,15 @@ DEFAULT_RULES: list[tuple[str, str, str]] = [
     ("marker", "name", r"\b(CENTER|CENTRE) OF GRAVITY\b|\bCDG\b|\bSKELETON\b|\bENVELOPE\b"),
     ("marker", "pn", r"-CDG$"),
     ("lockwire", "name", r"\bLOCK ?WIRE\b|\bSAFETY (CABLE|WIRE)\b|\bFIL FREIN\b|\bCABLE\b|\bFERRULE\b"),
-    ("backup_ring", "name", r"\bBACK[- ]?UP RING\b|\bANTI[- ]?EXTRUSION\b"),
+    ("backup_ring", "name", r"\bBACK[- ]?UP RING\b|\bANTI[- ]?EXTRUSION\b|\bCONTRE[- ]?BAGUE\b"),
     ("seal", "name", r"\bO[- ]?RING\b|\bPACKING\b|\bSEAL\b|\bJOINT\b|\bGASKET\b"),
     ("seal", "pn", r"^(M83461|M83248|M25988|MS28775|MS29513|NAS1611|NAS1612|AS568)"),
-    ("backup_ring", "pn", r"^(M8791|MS28774|MS28782)"),
+    ("backup_ring", "pn", r"^(M8791|MS28774|MS28782|NSA8671)"),
     ("insert", "name", r"\bINSERT\b|\bHELICOIL\b|\bHELI-?COIL\b|\bKEENSERT\b"),
     ("insert", "pn", r"^(MS21209|NAS1130|MS124\d{3}|2TLF|\d{11}$)"),
     ("press_plug", "name", r"\bLEE PLUG\b|\bEXPANDER\b|\bBETA PLUG\b"),
     ("press_plug", "pn", r"^PLG[A-Z]?\d"),
+    ("dowel", "name", r"\bDOWEL\b|\bLOCATING PIN\b|\bPIED DE CENTRAGE\b"),
     ("plate", "name", r"\bPLATE\b.*\b(IDENT|AMEND|NAME|DATA)|\b(IDENT|AMEND|NAME|DATA)\w*\s+PLATE\b|\bLABEL\b|\bPLAQU"),
     ("cap", "name", r"\bPROTECTIVE CAP\b|\bSTORAGE PLUG\b|\bDUST CAP\b|\bBOUCHON\b"),
     ("cap", "pn", r"^(MS21914|MS21913)"),
@@ -90,6 +92,15 @@ def normalise_pn(pn: str, manuf_prefix: str | None = None) -> str:
     return p
 
 
+def _thin_ring(geometry: dict | None) -> bool:
+    """Round and flat: axial length under 15 % of the diameter (a back-up ring, not a bush or a sleeve)."""
+    b = (geometry or {}).get("bbox")
+    if not b:
+        return False
+    dims = sorted([b[3] - b[0], b[4] - b[1], b[5] - b[2]], reverse=True)
+    return dims[0] > 0 and dims[1] / dims[0] > 0.95 and dims[2] / dims[0] < 0.15
+
+
 class RoleClassifier:
     def __init__(self, extra_rules: list[tuple[str, str, str]] | None = None):
         rules = list(extra_rules or []) + DEFAULT_RULES
@@ -103,6 +114,9 @@ class RoleClassifier:
             if fld == "pn" and rx.search(pn):
                 return RoleDecision(role, f"part number /{rx.pattern}/", 0.9)
             if fld == "name" and any(rx.search(t) for t in texts):
+                if role == "bush" and _thin_ring(geometry):
+                    # "BAGUE" / "RING" that is a flat ring, not a sleeve: a back-up ring next to a packing
+                    return RoleDecision("backup_ring", f"nomenclature /{rx.pattern}/ + geometry: thin flat ring", 0.7)
                 return RoleDecision(role, f"nomenclature /{rx.pattern}/", 0.85)
         if geometry is not None and not geometry.get("bbox"):
             return RoleDecision("marker", "no geometry", 0.7)

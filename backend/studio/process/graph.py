@@ -149,6 +149,24 @@ def build_process(ipl: dict, sequence: dict, drawing: dict | None, options: dict
               one_subtask: dict | None = None, only=None) -> list[dict]:
         """Removal ops for the children of row ``pid``. -> the child rows removed, in order."""
         grouped: list[dict] = []
+        level_ids = {r["id"] for r in kids_of.get(pid, [])}
+        unit_members = {s["unit"]: s["members"] for s in steps}
+
+        def unit_row(t: str | None) -> str | None:
+            """The row at this level of a sequence unit (a part, a sub-assembly, the base unit)."""
+            if not t:
+                return None
+            for r in item_rows(unit_members.get(t) or all_units.get(t) or [t]):
+                m = child_of(r, pid)
+                if m is not None:
+                    return m["id"]
+            return None
+
+        def held_row(s: dict) -> str | None:
+            """The row at this level of the part this step's attaching part holds (the sequence's ``attaches``,
+            worked out per occurrence: one screw part number can hold several parts)."""
+            return unit_row(s.get("attaches"))
+
         for s in steps:
             rws = item_rows(s["members"])
             mains = [m for m in (child_of(r, pid) for r in rws) if m is not None and m["depth"] != 0]
@@ -163,29 +181,35 @@ def build_process(ipl: dict, sequence: dict, drawing: dict | None, options: dict
                 lr = child_of(r, pid) or r
                 if lr["id"] != main["id"] and lr["id"] not in {x["id"] for x in riders} and not done_row(lr):
                     riders.append(lr)
-            g = next((g for g in grouped if g["main"]["id"] == main["id"]), None)
+            target = None
+            if main["attaching"]:
+                h = held_row(s)
+                target = h if h in level_ids and h != main["id"] else main.get("attaching_for")
+            g = next((g for g in grouped if g["main"]["id"] == main["id"] and g["target"] == target), None)
             if g:
                 g["occs"] += s["members"]
                 g["rider_occs"] += s["riders"]
                 g["steps"].append(s["step"])
                 g["forced"] = g["forced"] or s["forced"]
+                if s.get("check") and s["check"] not in g["checks"]:
+                    g["checks"].append(s["check"])
                 for r in riders:
                     if r["id"] not in {x["id"] for x in g["riders"]}:
                         g["riders"].append(r)
             else:
                 grouped.append({"main": main, "occs": list(s["members"]), "rider_occs": list(s["riders"]),
                                 "riders": riders, "steps": [s["step"]], "direction": s["direction_label"],
-                                "forced": s["forced"]})
-        level_ids = {r["id"] for r in kids_of.get(pid, [])}
+                                "forced": s["forced"], "target": target, "on": unit_row(s.get("on")),
+                                "checks": [s["check"]] if s.get("check") else []})
 
-        def is_att(r: dict) -> bool:
-            return bool(r["attaching"] and r.get("attaching_for") in level_ids and r["attaching_for"] != r["id"])
+        def is_att(g: dict) -> bool:
+            return bool(g["main"]["attaching"] and g["target"] in level_ids and g["target"] != g["main"]["id"])
 
         attaching_groups: dict[str, list[dict]] = defaultdict(list)
         for g in grouped:
-            if is_att(g["main"]):
-                attaching_groups[g["main"]["attaching_for"]].append(g)
-        main_groups = [g for g in grouped if not is_att(g["main"])]
+            if is_att(g):
+                attaching_groups[g["target"]].append(g)
+        main_groups = [g for g in grouped if not is_att(g)]
         for t, gs in attaching_groups.items():                  # attaching parts whose item is never removed
             if t not in {g["main"]["id"] for g in main_groups}:
                 main_groups.append({"main": by_id[t], "occs": [], "rider_occs": [], "riders": [],
@@ -209,11 +233,22 @@ def build_process(ipl: dict, sequence: dict, drawing: dict | None, options: dict
                 st["rows"].append(ar["id"])
                 washers = [r for r in rows if r["role"] == "washer" and r.get("fastener_row") == ar["id"]]
                 items = [{**_item(ar), "count": count(ar, ag["occs"])}]
+                w_occs: list[str] = []
                 for w in washers:
-                    items.append({**_item(w), "count": w.get("units_per_assy") or 1})
+                    # the washers under these screws: the 3D washer steps that hold the same part
+                    mine = [o for x in attaching_groups.get(main["id"], []) if x["main"]["id"] == w["id"]
+                            for o in x["occs"] if o not in used_occs]
+                    if not mine and any(x["main"]["id"] == w["id"] for x in grouped):
+                        continue                    # its washers are under the screws of another part
+                    if not mine:
+                        mine = [o for o in w["occ_ids"] if o not in used_occs]
+                    if w["occ_ids"] and not mine:
+                        continue
+                    items.append({**_item(w), "count": len(mine) if mine else (w.get("units_per_assy") or 1)})
+                    w_occs += mine
                     st["rows"].append(w["id"])
                 add({"type": "unfasten", "phase": "disassembly", "items": items,
-                     "occ_ids": ag["occs"] + [o for w in washers for o in w["occ_ids"]],
+                     "occ_ids": ag["occs"] + w_occs,
                      "from": {**_item(main), "count": count(main, g["occs"]) if g["occs"] else (main.get("units_per_assy") or 1)},
                      "torque": torque_range(ar.get("torque")), "direction": ag["direction"], "flags": flags_for(ag["forced"])}, st)
             if g.get("stays") or done_row(main):
@@ -222,12 +257,16 @@ def build_process(ipl: dict, sequence: dict, drawing: dict | None, options: dict
                     st["kind"] = "attaching"
                 continue
             loose = [r for r in g["riders"] if not r["permanent"] and child_of(r, main["id"]) is None and not done_row(r)]
-            frm = from_row if from_row and from_row["id"] != main["id"] else default_from
+            # removed from the part it sits on (from the 3D), else from the base of this level
+            on = by_id.get(g.get("on") or "")
+            frm = on if on is not None and on["id"] != main["id"] and on["id"] in level_ids else \
+                from_row if from_row and from_row["id"] != main["id"] else default_from
             add({"type": "remove", "phase": "disassembly", "items": [{**_item(main), "count": count(main, g["occs"])}],
                  "occ_ids": g["occs"] + g["rider_occs"], "from": _item(frm) if frm else None,
                  "discard": bool(main.get("discard_on_removal")) or main["role"] in ("seal", "backup_ring"),
                  "with": [{**_item(r), "count": count(r, g["rider_occs"])} for r in g["riders"] if not done_row(r)],
-                 "direction": g["direction"], "flags": flags_for(g["forced"])}, st)
+                 "direction": g["direction"], "flags": flags_for(g["forced"]) + [c for c in g.get("checks", [])
+                                                                               if not g["forced"]]}, st)
             removed.append(main)
             removed += [r for r in loose if kids_of.get(r["id"])]      # carried sub-assemblies are disassembled too
             if loose:
@@ -267,7 +306,7 @@ def build_process(ipl: dict, sequence: dict, drawing: dict | None, options: dict
 
     def removable(r: dict) -> bool:
         return bool(r["occ_ids"]) and not r["permanent"] and (r.get("units_per_assy") or 0) > 0 \
-            and r["role"] not in ("insert", "press_plug", "plate") and not NO_REMOVE.search(r["nomenclature"] or "") \
+            and r["role"] not in ("insert", "press_plug", "plate", "dowel") and not NO_REMOVE.search(r["nomenclature"] or "") \
             and not r.get("process")
 
     def disassemble(row: dict, keep_note: list[dict]) -> None:
@@ -301,7 +340,9 @@ def build_process(ipl: dict, sequence: dict, drawing: dict | None, options: dict
                      "occ_ids": a["occ_ids"], "from": _item(k), "torque": torque_range(a.get("torque")), "flags": []}, st)
                 st["rows"].append(a["id"])
             add({"type": "remove", "phase": "disassembly", "items": [{**_item(k), "count": k.get("units_per_assy") or 1}],
-                 "occ_ids": list(k["occ_ids"]), "from": _item(row), "with": [], "flags": [] if plan else
+                 "occ_ids": list(k["occ_ids"]), "from": _item(row), "with": [],
+                 "discard": bool(k.get("discard_on_removal")) or k["role"] in ("seal", "backup_ring"),
+                 "flags": [] if plan else
                  ["No 3D sub-assembly to plan from: parts-list order. Check the order."]}, st)
             st["rows"].append(k["id"])
             removed.append(k)
@@ -328,6 +369,7 @@ def build_process(ipl: dict, sequence: dict, drawing: dict | None, options: dict
                  "flags": ["Not in the 3D model: confirm where this item is installed."]}, st)
 
     sub_plans = sequence.get("sub") or {}
+    all_units = {u["id"]: u["members"] for p in [sequence, *sub_plans.values()] for u in p.get("units", [])}
     top_id = top["id"] if top else None
     removed_top = level(sequence.get("disassembly", []), top_id, sequence.get("base_unit"), None) if top_id else []
     kept: list[dict] = []
@@ -335,7 +377,7 @@ def build_process(ipl: dict, sequence: dict, drawing: dict | None, options: dict
     for row in removed_top + ([base_top] if base_top and base_top not in removed_top else []):
         disassemble(row, kept)
 
-    perm = [r for r in rows if r["permanent"] and r["occ_ids"] and r["role"] in ("insert", "press_plug") and not r.get("alternate_of")]
+    perm = [r for r in rows if r["permanent"] and r["occ_ids"] and r["role"] in ("insert", "press_plug", "dowel") and not r.get("alternate_of")]
     if perm or kept:
         st = new_st("Parts that stay installed")
         st["id"] = f"st-d{len(subtasks):02d}x"
